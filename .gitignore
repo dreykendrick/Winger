@@ -1,0 +1,18 @@
+# Environment variables
+.env
+.env.local
+.env.staging
+.env.production
+supabase/functions/.env.local
+
+# Supabase local data
+supabase/.temp
+.branches
+
+# Node / Deno dependencies
+node_modules/
+vendor/
+
+# System files
+.DS_Store
+Thumbs.db
