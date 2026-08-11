@@ -2,7 +2,9 @@
 .env
 .env.*
 !.env.example
+supabase/functions/.env
 supabase/functions/.env.local
+supabase/functions/.env.*
 
 # Supabase local data
 supabase/.temp
