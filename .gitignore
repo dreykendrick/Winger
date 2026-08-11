@@ -1,18 +1,28 @@
 # Environment variables
 .env
-.env.local
-.env.staging
-.env.production
+.env.*
+!.env.example
 supabase/functions/.env.local
 
 # Supabase local data
 supabase/.temp
 .branches
 
+# Flutter & Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+
 # Node / Deno dependencies
 node_modules/
 vendor/
 
-# System files
+# IDE & System files
+.idea/
+*.iml
+.metadata
 .DS_Store
 Thumbs.db
