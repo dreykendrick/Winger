@@ -1,35 +1,43 @@
 import '../../../../core/errors/failures.dart';
+import '../entities/account_type.dart';
+import '../entities/auth_state.dart';
 import '../entities/identity_context.dart';
 import '../entities/user_profile.dart';
 
-/// Abstract contract for Authentication & Identity repository.
 abstract class AuthRepository {
-  Future<Result<UserProfile, Failure>> signUpWithEmail({
+  Stream<AuthState> get authStateStream;
+  UserProfile? get currentUser;
+  IdentityContext get identityContext;
+
+  Future<Result<UserProfile, Failure>> signInWithPassword(
+    String email,
+    String password,
+  );
+
+  Future<Result<void, Failure>> signUp({
     required String email,
     required String password,
-    String? fullName,
+    required String fullName,
+    AccountType accountType = AccountType.vendor,
   });
 
-  Future<Result<UserProfile, Failure>> signInWithEmail({
-    required String email,
-    required String password,
-  });
+  Future<Result<void, Failure>> sendPhoneOtp(String phone);
 
-  Future<Result<void, Failure>> sendPasswordResetEmail({
-    required String email,
-  });
+  Future<Result<void, Failure>> verifyPhoneOtp(
+    String phone,
+    String code,
+  );
 
-  Future<Result<void, Failure>> updatePassword({
-    required String newPassword,
-  });
+  Future<Result<void, Failure>> sendPasswordReset(String email);
 
-  Future<Result<void, Failure>> resendVerificationEmail({
-    required String email,
-  });
+  Future<Result<void, Failure>> resendVerificationEmail(
+      {required String email});
 
-  Future<Result<UserProfile?, Failure>> getCurrentUser();
-
-  Future<Result<IdentityContext, Failure>> loadIdentityContext(String userId);
+  Future<Result<void, Failure>> updatePassword({required String newPassword});
 
   Future<Result<void, Failure>> signOut();
+
+  Future<IdentityContext> loadIdentityContext(String userId);
+
+  Future<void> restoreSession();
 }

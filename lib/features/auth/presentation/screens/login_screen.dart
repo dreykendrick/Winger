@@ -54,12 +54,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           if (!mounted) return;
           context.go(RouteNames.home);
         });
+      } else if (next is RequiresPhoneVerification) {
+        context.push('/verify-phone', extra: next.phone);
       } else if (next is AuthenticationFailure) {
         setState(() {
           _errorMessage = next.failure.message;
         });
-      } else if (next is RegistrationPendingVerification) {
-        context.push('/verify-email', extra: next.email);
       } else if (next is PasswordResetRequired) {
         context.push('/reset-password', extra: next.email);
       }

@@ -1,9 +1,6 @@
 import '../../../../core/errors/failures.dart';
-import 'identity_context.dart';
-import 'user_profile.dart';
 
-/// Sealed class hierarchy representing explicit Authentication states.
-sealed class AuthState {
+abstract class AuthState {
   const AuthState();
 }
 
@@ -16,26 +13,17 @@ final class Authenticating extends AuthState {
 }
 
 final class Authenticated extends AuthState {
-  final UserProfile user;
-  final IdentityContext identityContext;
-
-  const Authenticated({
-    required this.user,
-    required this.identityContext,
-  });
+  const Authenticated();
 }
 
-final class SessionRefreshing extends AuthState {
-  const SessionRefreshing();
+final class AuthenticationFailure extends AuthState {
+  final Failure failure;
+  const AuthenticationFailure(this.failure);
 }
 
-final class SessionExpired extends AuthState {
-  const SessionExpired();
-}
-
-final class RegistrationPendingVerification extends AuthState {
+final class RegistrationStepCredentialsCompleted extends AuthState {
   final String email;
-  const RegistrationPendingVerification(this.email);
+  const RegistrationStepCredentialsCompleted(this.email);
 }
 
 final class PasswordResetRequired extends AuthState {
@@ -43,7 +31,17 @@ final class PasswordResetRequired extends AuthState {
   const PasswordResetRequired(this.email);
 }
 
-final class AuthenticationFailure extends AuthState {
-  final Failure failure;
-  const AuthenticationFailure(this.failure);
+final class RequiresPhoneVerification extends AuthState {
+  final String phone;
+  const RequiresPhoneVerification({this.phone = ''});
+}
+
+final class AwaitingPhoneVerification extends AuthState {
+  final String phone;
+  final int expiresIn;
+  const AwaitingPhoneVerification(this.phone, {this.expiresIn = 600});
+}
+
+final class PhoneVerified extends AuthState {
+  const PhoneVerified();
 }

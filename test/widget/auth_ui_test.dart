@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,8 @@ import 'package:winger/app/config/env_config.dart';
 import 'package:winger/app/providers/app_providers.dart';
 import 'package:winger/core/errors/failures.dart';
 import 'package:winger/core/storage/preferences_service.dart';
+import 'package:winger/features/auth/domain/entities/account_type.dart';
+import 'package:winger/features/auth/domain/entities/auth_state.dart';
 import 'package:winger/features/auth/domain/entities/identity_context.dart';
 import 'package:winger/features/auth/domain/entities/user_profile.dart';
 import 'package:winger/features/auth/domain/repositories/auth_repository.dart';
@@ -13,18 +16,55 @@ import 'package:winger/features/auth/presentation/providers/auth_providers.dart'
 import 'package:winger/features/auth/presentation/screens/forgot_password_screen.dart';
 import 'package:winger/features/auth/presentation/screens/login_screen.dart';
 import 'package:winger/features/auth/presentation/screens/register_screen.dart';
-import 'package:winger/features/auth/presentation/screens/verify_email_screen.dart';
+import 'package:winger/features/auth/presentation/screens/verify_phone_screen.dart';
 
 class FakeAuthRepository implements AuthRepository {
+  final _controller = StreamController<AuthState>.broadcast();
+
   @override
-  Future<Result<UserProfile?, Failure>> getCurrentUser() async =>
+  Stream<AuthState> get authStateStream => _controller.stream;
+
+  @override
+  UserProfile? get currentUser =>
+      const UserProfile(id: 'usr_1', email: 'test@winger.co');
+
+  @override
+  IdentityContext get identityContext =>
+      IdentityContext.defaultCustomer(currentUser!);
+
+  @override
+  Future<IdentityContext> loadIdentityContext(String userId) async =>
+      IdentityContext.defaultCustomer(currentUser!);
+
+  @override
+  Future<void> restoreSession() async {}
+
+  @override
+  Future<Result<UserProfile, Failure>> signInWithPassword(
+          String email, String password) async =>
+      Success(currentUser!);
+
+  @override
+  Future<Result<void, Failure>> signUp({
+    required String email,
+    required String password,
+    required String fullName,
+    AccountType accountType = AccountType.vendor,
+  }) async =>
       const Success(null);
 
   @override
-  Future<Result<IdentityContext, Failure>> loadIdentityContext(
-          String userId) async =>
-      Success(IdentityContext.defaultCustomer(
-          UserProfile(id: userId, email: 'test@winger.co')));
+  Future<Result<void, Failure>> sendPhoneOtp(String phone) async =>
+      const Success(null);
+
+  @override
+  Future<Result<void, Failure>> verifyPhoneOtp(
+          String phone, String code) async =>
+      const Success(null);
+
+  @override
+  Future<Result<void, Failure>> sendPasswordReset(String email) async =>
+      const Success(null);
 
   @override
   Future<Result<void, Failure>> resendVerificationEmail(
@@ -32,29 +72,12 @@ class FakeAuthRepository implements AuthRepository {
       const Success(null);
 
   @override
-  Future<Result<void, Failure>> sendPasswordResetEmail(
-          {required String email}) async =>
-      const Success(null);
-
-  @override
-  Future<Result<UserProfile, Failure>> signInWithEmail(
-          {required String email, required String password}) async =>
-      const Success(UserProfile(id: 'usr_1', email: 'test@winger.co'));
-
-  @override
-  Future<Result<void, Failure>> signOut() async => const Success(null);
-
-  @override
-  Future<Result<UserProfile, Failure>> signUpWithEmail(
-          {required String email,
-          required String password,
-          String? fullName}) async =>
-      const Success(UserProfile(id: 'usr_1', email: 'test@winger.co'));
-
-  @override
   Future<Result<void, Failure>> updatePassword(
           {required String newPassword}) async =>
       const Success(null);
+
+  @override
+  Future<Result<void, Failure>> signOut() async => const Success(null);
 }
 
 void main() {
@@ -90,8 +113,7 @@ void main() {
       expect(find.text('Log In'), findsWidgets);
     });
 
-    testWidgets(
-        'RegisterScreen renders account type segmented button and input fields',
+    testWidgets('RegisterScreen renders account type options and input fields',
         (WidgetTester tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -104,10 +126,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Join Winger Marketplace'), findsOneWidget);
-      expect(find.text('Buyer'), findsOneWidget);
-      expect(find.text('Vendor'), findsOneWidget);
-      expect(find.text('Affiliate'), findsOneWidget);
+      expect(find.text('Choose Account Goal'), findsOneWidget);
+      expect(find.text('Vendor / Merchant'), findsOneWidget);
+      expect(find.text('Affiliate Promoter'), findsOneWidget);
     });
 
     testWidgets('ForgotPasswordScreen renders reset link request form',
@@ -127,7 +148,8 @@ void main() {
       expect(find.text('Send Reset Link'), findsOneWidget);
     });
 
-    testWidgets('VerifyEmailScreen renders verification prompt and resend CTA',
+    testWidgets(
+        'VerifyPhoneScreen renders phone input and SMS verification CTA',
         (WidgetTester tester) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -136,14 +158,13 @@ void main() {
             authRepositoryProvider.overrideWithValue(fakeAuthRepository),
           ],
           child: const MaterialApp(
-              home: VerifyEmailScreen(email: 'user@winger.co')),
+              home: VerifyPhoneScreen(initialPhone: '+255712345678')),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Email Verification Required'), findsOneWidget);
-      expect(find.textContaining('user@winger.co'), findsOneWidget);
-      expect(find.text('Resend Email'), findsOneWidget);
+      expect(find.text('Verify Your Phone Number'), findsOneWidget);
+      expect(find.text('Send SMS Verification Code'), findsOneWidget);
     });
   });
 }

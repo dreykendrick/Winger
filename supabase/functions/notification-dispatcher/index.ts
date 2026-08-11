@@ -3,11 +3,13 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 import { corsHeaders } from '../_shared/cors.ts';
 import { buildSuccessResponse, buildErrorResponse } from '../_shared/response.ts';
+import { briqSendSms } from '../_shared/briq.ts';
 
 interface OutboxEventPayload {
   event_type: string;
   payload: Record<string, unknown>;
   target_profile_id?: string;
+  channel?: 'IN_APP' | 'SMS' | 'EMAIL' | 'PUSH';
 }
 
 serve(async (req: Request) => {
@@ -29,18 +31,20 @@ serve(async (req: Request) => {
       return buildErrorResponse('Invalid event payload', 'VALIDATION_ERROR', 400);
     }
 
+    const channel = event.channel || 'IN_APP';
+
     // Fetch active notification template
     const { data: template } = await supabase
       .schema('notifications')
       .from('templates')
       .select('subject_template, body_template')
       .eq('event_type', event.event_type)
-      .eq('channel', 'IN_APP')
+      .eq('channel', channel)
       .eq('is_active', true)
       .maybeSingle();
 
     if (!template) {
-      return buildSuccessResponse({ dispatched: false }, `No template configured for ${event.event_type}`, 'NO_TEMPLATE', 200);
+      return buildSuccessResponse({ dispatched: false }, `No template configured for ${event.event_type} (${channel})`, 'NO_TEMPLATE', 200);
     }
 
     // Interpolate template placeholders
@@ -59,14 +63,27 @@ serve(async (req: Request) => {
       return buildSuccessResponse({ dispatched: false }, 'Target profile ID missing in event payload', 'MISSING_TARGET_PROFILE', 200);
     }
 
-    // Dispatch notification via RPC
+    // If SMS channel requested, send SMS via Briq adapter
+    if (channel === 'SMS') {
+      const { data: targetProfile } = await supabase
+        .from('profiles')
+        .select('phone_number')
+        .eq('id', targetProfileId)
+        .single();
+
+      if (targetProfile?.phone_number) {
+        await briqSendSms(targetProfile.phone_number, content);
+      }
+    }
+
+    // Dispatch notification record via RPC
     const { data: notifId, error: rpcError } = await supabase.rpc('notifications.fn_dispatch_notification', {
       p_profile_id: targetProfileId,
       p_event_type: event.event_type,
       p_title: title,
       p_content: content,
       p_metadata: event.payload,
-      p_channel: 'IN_APP',
+      p_channel: channel,
     });
 
     if (rpcError) {
