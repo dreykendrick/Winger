@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'package:supabase_flutter/supabase_flutter.dart'
-    hide AuthState, UserProfile;
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import '../../../../core/errors/failures.dart';
 import '../../../../core/logging/app_logger.dart';
 import '../../domain/entities/account_type.dart';
@@ -26,7 +25,7 @@ class AuthRepositoryImpl implements AuthRepository {
       final event = data.event;
       final session = data.session;
 
-      if (session != null && session.user != null) {
+      if (session != null) {
         _currentUser = UserProfile(
           id: session.user.id,
           email: session.user.email ?? '',
@@ -47,8 +46,8 @@ class AuthRepositoryImpl implements AuthRepository {
               VerificationStatus.verified) {
             _authStateController.add(const Authenticated());
           } else {
-            _authStateController.add(RequiresPhoneVerification(
-                phone: _currentUser?.phone ?? ''));
+            _authStateController.add(
+                RequiresPhoneVerification(phone: _currentUser?.phone ?? ''));
           }
         }
       } else if (event == AuthChangeEvent.signedOut) {
@@ -73,7 +72,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> restoreSession() async {
     final session = _supabaseClient.auth.currentSession;
-    if (session != null && session.user != null) {
+    if (session != null) {
       _currentUser = UserProfile(
         id: session.user.id,
         email: session.user.email ?? '',
@@ -90,8 +89,8 @@ class AuthRepositoryImpl implements AuthRepository {
       if (_identityContext.verificationStatus == VerificationStatus.verified) {
         _authStateController.add(const Authenticated());
       } else {
-        _authStateController.add(
-            RequiresPhoneVerification(phone: _currentUser?.phone ?? ''));
+        _authStateController
+            .add(RequiresPhoneVerification(phone: _currentUser?.phone ?? ''));
       }
     } else {
       _authStateController.add(const Unauthenticated());
@@ -140,8 +139,8 @@ class AuthRepositoryImpl implements AuthRepository {
       if (_identityContext.verificationStatus == VerificationStatus.verified) {
         _authStateController.add(const Authenticated());
       } else {
-        _authStateController.add(
-            RequiresPhoneVerification(phone: _currentUser?.phone ?? ''));
+        _authStateController
+            .add(RequiresPhoneVerification(phone: _currentUser?.phone ?? ''));
       }
 
       return Success(_currentUser!);
