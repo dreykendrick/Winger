@@ -12,7 +12,7 @@ Or set them locally/via CLI:
 ```bash
 supabase secrets set BRIQ_API_KEY="your_briq_api_key_here"
 supabase secrets set BRIQ_APP_ID="your_optional_app_id_here"
-supabase secrets set BRIQ_SENDER_ID="Winger"
+supabase secrets set BRIQ_SENDER_ID="Afrilink"
 ```
 
 ### Environment Variable References

@@ -33,7 +33,7 @@ export async function briqRequestOtp(phoneNumber: string): Promise<{ success: bo
         delivery_method: 'sms',
         otp_length: 6,
         minutes_to_expire: 10,
-        sender_id: Deno.env.get('BRIQ_SENDER_ID') ?? 'Winger',
+        sender_id: Deno.env.get('BRIQ_SENDER_ID') ?? 'Afrilink',
       }),
     });
 
@@ -83,7 +83,7 @@ export async function briqSendSms(phoneNumber: string, message: string): Promise
       body: JSON.stringify({
         content: message,
         recipients: [digits],
-        sender_id: Deno.env.get('BRIQ_SENDER_ID') ?? 'Winger',
+        sender_id: Deno.env.get('BRIQ_SENDER_ID') ?? 'Afrilink',
       }),
     });
 
