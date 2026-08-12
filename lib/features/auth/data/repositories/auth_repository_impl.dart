@@ -368,7 +368,10 @@ class AuthRepositoryImpl implements AuthRepository {
         if (data != null) {
           final roleStr =
               (data['user_role'] as String? ?? 'CUSTOMER').toUpperCase();
-          final isPhoneVerified = data['phone_verified'] as bool? ?? false;
+          // phone_verified is only present when the Sprint 10 migration has been
+          // applied. If the field is absent (older schema), default to true so
+          // login is not blocked. Phone verification is enforced during signup.
+          final isPhoneVerified = data['phone_verified'] as bool? ?? true;
 
           AccountType accountType;
           if (roleStr == 'VENDOR') {
