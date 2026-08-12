@@ -50,8 +50,7 @@ class RouteGuards {
 
     if (isAuthenticated &&
         (currentLocation == RouteNames.login ||
-            currentLocation == '/register' ||
-            currentLocation == '/verify-phone')) {
+            currentLocation == '/register')) {
       return RouteNames.home;
     }
 

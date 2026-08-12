@@ -15,44 +15,59 @@ class AuthRepositoryImpl implements AuthRepository {
 
   UserProfile? _currentUser;
   late IdentityContext _identityContext;
+
+  // Flags to prevent double-emission between signInWithPassword/signUp
+  // and the onAuthStateChange listener firing concurrently.
   bool _isRegistering = false;
+  bool _isSigningIn = false;
 
   AuthRepositoryImpl(this._supabaseClient) {
     const defaultUser = UserProfile(id: 'guest', email: '', fullName: 'Guest');
     _identityContext = IdentityContext.defaultCustomer(defaultUser);
 
+    // onAuthStateChange handles session changes that happen OUTSIDE of direct
+    // method calls (e.g. token refresh, deep link OAuth, app resume).
+    // It deliberately skips emission when _isSigningIn or _isRegistering
+    // is true to avoid racing with signInWithPassword() / signUp().
     _supabaseClient.auth.onAuthStateChange.listen((data) async {
       final event = data.event;
       final session = data.session;
 
-      if (session != null) {
+      if (event == AuthChangeEvent.signedIn ||
+          event == AuthChangeEvent.tokenRefreshed) {
+        // Skip: signInWithPassword() is already handling this event.
+        if (_isSigningIn) return;
+        // Skip: signUp() will handle the registration flow.
+        if (_isRegistering) return;
+
+        if (session == null) return;
+
         _currentUser = UserProfile(
           id: session.user.id,
           email: session.user.email ?? '',
           fullName: session.user.userMetadata?['full_name'] as String? ?? '',
         );
 
-        if (event == AuthChangeEvent.signedIn && !_isRegistering) {
-          try {
-            _identityContext = await loadIdentityContext(session.user.id)
-                .timeout(const Duration(seconds: 4),
-                    onTimeout: () =>
-                        IdentityContext.defaultCustomer(_currentUser!));
-          } catch (_) {
-            _identityContext = IdentityContext.defaultCustomer(_currentUser!);
-          }
+        try {
+          _identityContext = await loadIdentityContext(session.user.id).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => IdentityContext.defaultCustomer(_currentUser!),
+          );
+        } catch (_) {
+          _identityContext = IdentityContext.defaultCustomer(_currentUser!);
+        }
 
-          if (_identityContext.verificationStatus ==
-              VerificationStatus.verified) {
-            _authStateController.add(const Authenticated());
-          } else {
-            _authStateController.add(
-                RequiresPhoneVerification(phone: _currentUser?.phone ?? ''));
-          }
+        if (_identityContext.verificationStatus ==
+            VerificationStatus.verified) {
+          _authStateController.add(const Authenticated());
+        } else {
+          _authStateController
+              .add(RequiresPhoneVerification(phone: _currentUser?.phone ?? ''));
         }
       } else if (event == AuthChangeEvent.signedOut) {
         _currentUser = null;
         _isRegistering = false;
+        _isSigningIn = false;
         _identityContext = IdentityContext.defaultCustomer(
             const UserProfile(id: 'guest', email: '', fullName: 'Guest'));
         _authStateController.add(const Unauthenticated());
@@ -80,8 +95,9 @@ class AuthRepositoryImpl implements AuthRepository {
       );
       try {
         _identityContext = await loadIdentityContext(session.user.id).timeout(
-            const Duration(seconds: 4),
-            onTimeout: () => IdentityContext.defaultCustomer(_currentUser!));
+          const Duration(seconds: 5),
+          onTimeout: () => IdentityContext.defaultCustomer(_currentUser!),
+        );
       } catch (_) {
         _identityContext = IdentityContext.defaultCustomer(_currentUser!);
       }
@@ -103,7 +119,7 @@ class AuthRepositoryImpl implements AuthRepository {
     String password,
   ) async {
     try {
-      _isRegistering = false;
+      _isSigningIn = true;
       _authStateController.add(const Authenticating());
 
       AppLogger.info('Attempting sign in for: $email');
@@ -114,6 +130,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
       final user = response.user;
       if (user == null) {
+        _isSigningIn = false;
         const failure =
             AuthError('Sign in failed. Invalid user data returned.');
         _authStateController.add(const AuthenticationFailure(failure));
@@ -128,13 +145,15 @@ class AuthRepositoryImpl implements AuthRepository {
 
       try {
         _identityContext = await loadIdentityContext(user.id).timeout(
-          const Duration(seconds: 4),
+          const Duration(seconds: 5),
           onTimeout: () => IdentityContext.defaultCustomer(_currentUser!),
         );
       } catch (e) {
-        AppLogger.warning('Identity context load note: $e');
+        AppLogger.warning('Identity context load failed, using default: $e');
         _identityContext = IdentityContext.defaultCustomer(_currentUser!);
       }
+
+      _isSigningIn = false;
 
       if (_identityContext.verificationStatus == VerificationStatus.verified) {
         _authStateController.add(const Authenticated());
@@ -145,11 +164,13 @@ class AuthRepositoryImpl implements AuthRepository {
 
       return Success(_currentUser!);
     } on AuthException catch (e) {
+      _isSigningIn = false;
       AppLogger.error('AuthException during signIn: ${e.message}');
       final failure = AuthError(e.message);
       _authStateController.add(AuthenticationFailure(failure));
       return Error(failure);
     } catch (e) {
+      _isSigningIn = false;
       AppLogger.error('Unexpected error during signIn: $e');
       final failure = AuthError(e.toString());
       _authStateController.add(AuthenticationFailure(failure));
@@ -179,6 +200,7 @@ class AuthRepositoryImpl implements AuthRepository {
       );
 
       if (response.user == null) {
+        _isRegistering = false;
         const failure =
             AuthError('Registration failed. No user object returned.');
         _authStateController.add(const AuthenticationFailure(failure));
@@ -191,6 +213,8 @@ class AuthRepositoryImpl implements AuthRepository {
         fullName: fullName,
       );
 
+      // Emit credentials-completed so the register screen advances to phone entry.
+      // Keep _isRegistering = true so onAuthStateChange doesn't interfere.
       _authStateController.add(RegistrationStepCredentialsCompleted(email));
       return const Success(null);
     } on AuthException catch (e) {
@@ -262,10 +286,13 @@ class AuthRepositoryImpl implements AuthRepository {
       }
 
       _isRegistering = false;
+      _isSigningIn = false;
       if (_currentUser != null) {
         try {
           _identityContext = await loadIdentityContext(_currentUser!.id);
-        } catch (_) {}
+        } catch (_) {
+          _identityContext = IdentityContext.defaultCustomer(_currentUser!);
+        }
       }
 
       _authStateController.add(const PhoneVerified());
@@ -313,6 +340,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<Result<void, Failure>> signOut() async {
     try {
       _isRegistering = false;
+      _isSigningIn = false;
       await _supabaseClient.auth.signOut();
       _currentUser = null;
       _identityContext = IdentityContext.defaultCustomer(
@@ -334,7 +362,9 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final res = await _supabaseClient.functions.invoke('workspace-context');
       if (res.status == 200 && res.data != null) {
-        final data = res.data['data'] as Map<String, dynamic>?;
+        // workspace-context wraps the RPC result under a 'data' key
+        final wrapper = res.data as Map<String, dynamic>?;
+        final data = wrapper?['data'] as Map<String, dynamic>?;
         if (data != null) {
           final roleStr =
               (data['user_role'] as String? ?? 'CUSTOMER').toUpperCase();
@@ -362,8 +392,13 @@ class AuthRepositoryImpl implements AuthRepository {
           );
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.warning('loadIdentityContext error: $e');
+    }
 
+    // Fallback: treat as verified customer so the user is not stuck in a
+    // verification loop when the workspace-context function is unavailable
+    // (e.g. Edge Functions not deployed yet in local dev).
     return IdentityContext.defaultCustomer(userProfile);
   }
 }
