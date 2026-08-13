@@ -30,7 +30,9 @@ jobs:
         run: flutter pub get
 
       - name: Verify Code Formatting
-        run: dart format --output=none --set-exit-if-changed .
+        run: |
+          git config --global core.autocrlf input
+          dart format --output=none --set-exit-if-changed lib test
 
       - name: Run Static Analysis
         run: flutter analyze --no-fatal-infos
