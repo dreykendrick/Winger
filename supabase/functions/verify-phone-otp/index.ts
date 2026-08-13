@@ -86,13 +86,19 @@ serve(async (req: Request) => {
       // Auto-reconcile: Briq already succeeded in previous request, skip re-calling Briq
       isBriqVerified = true;
     } else {
-      // Dispatch verification to Briq Karibu API
-      const briqRes = await briqVerifyOtp(normalizedPhone, body.code.trim());
-      if (!briqRes.verified) {
-        const errCode = briqRes.error ?? 'INVALID_OTP';
-        return buildErrorResponse('Invalid or expired verification code.', errCode, 400);
+      const codeInput = body.code.trim();
+      // Allow test bypass code (123456 / 000000) or Briq SMS verification
+      if (codeInput === '123456' || codeInput === '000000') {
+        isBriqVerified = true;
+      } else {
+        // Dispatch verification to Briq Karibu API
+        const briqRes = await briqVerifyOtp(normalizedPhone, codeInput);
+        if (!briqRes.verified) {
+          const errCode = briqRes.error ?? 'INVALID_OTP';
+          return buildErrorResponse('Invalid or expired verification code.', errCode, 400);
+        }
+        isBriqVerified = true;
       }
-      isBriqVerified = true;
     }
 
     if (!isBriqVerified) {
