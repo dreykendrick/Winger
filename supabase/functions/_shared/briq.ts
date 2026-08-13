@@ -5,8 +5,8 @@ const BRIQ_BASE_URL = 'https://karibu.briq.tz';
 
 function briqHeaders(): HeadersInit {
   const apiKey = Deno.env.get('BRIQ_API_KEY');
-  if (!apiKey) {
-    throw new Error('BRIQ_API_KEY secret is not configured in Supabase Edge Functions');
+  if (!apiKey || apiKey.trim().length === 0) {
+    throw new Error('BRIQ_NOT_CONFIGURED: BRIQ_API_KEY secret is not configured in Supabase Edge Functions');
   }
   return {
     'Content-Type': 'application/json',

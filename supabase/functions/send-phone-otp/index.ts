@@ -78,7 +78,12 @@ serve(async (req: Request) => {
     // Dispatch OTP via Briq Karibu API
     const briqRes = await briqRequestOtp(normalizedPhone);
     if (!briqRes.success) {
-      return buildErrorResponse(`Failed to send verification SMS: ${briqRes.error}`, 'SMS_DELIVERY_FAILED', 502);
+      const isConfigError = briqRes.error?.includes('BRIQ_NOT_CONFIGURED');
+      const errCode = isConfigError ? 'BRIQ_NOT_CONFIGURED' : (briqRes.error ?? 'SMS_DELIVERY_FAILED');
+      const errMsg = isConfigError
+        ? 'Briq SMS Gateway is not configured. Missing BRIQ_API_KEY secret in Supabase Edge Functions.'
+        : `Failed to send verification SMS: ${briqRes.error}`;
+      return buildErrorResponse(errMsg, errCode, 500);
     }
 
     // Store pending challenge metadata in database
@@ -97,6 +102,13 @@ serve(async (req: Request) => {
     return buildSuccessResponse({ expires_in: 600 }, 'Verification code sent successfully', 'OTP_SENT', 200);
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown exception';
+    if (errorMsg.includes('BRIQ_NOT_CONFIGURED')) {
+      return buildErrorResponse(
+        'Briq SMS Gateway is not configured. Missing BRIQ_API_KEY secret in Supabase Edge Functions.',
+        'BRIQ_NOT_CONFIGURED',
+        500
+      );
+    }
     return buildErrorResponse(errorMsg, 'EXCEPTION_ERROR', 500);
   }
 });
