@@ -25,16 +25,21 @@ export function normalizeTanzanianPhone(raw: string): string | null {
 
 export async function briqRequestOtp(phoneNumber: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const senderId = Deno.env.get('BRIQ_SENDER_ID')?.trim();
+    const payload: Record<string, unknown> = {
+      phone_number: phoneNumber,
+      delivery_method: 'sms',
+      otp_length: 6,
+      minutes_to_expire: 10,
+    };
+    if (senderId && senderId.length > 0) {
+      payload.sender_id = senderId;
+    }
+
     const res = await fetch(`${BRIQ_BASE_URL}/v1/otp/request`, {
       method: 'POST',
       headers: briqHeaders(),
-      body: JSON.stringify({
-        phone_number: phoneNumber,
-        delivery_method: 'sms',
-        otp_length: 6,
-        minutes_to_expire: 10,
-        sender_id: Deno.env.get('BRIQ_SENDER_ID') ?? 'Afrilink',
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
