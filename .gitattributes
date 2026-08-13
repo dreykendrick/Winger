@@ -1,0 +1,9 @@
+# Auto-detect text files and normalize line endings to LF (Linux standard for Dart & CI)
+* text=auto eol=lf
+*.dart text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sql text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
