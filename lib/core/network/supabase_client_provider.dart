@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../app/config/env_config.dart';
 import '../logging/app_logger.dart';
@@ -23,10 +22,20 @@ class SupabaseService {
     final url = EnvConfig.supabaseUrl;
     final publishableKey = EnvConfig.supabaseAnonKey;
 
-    if (url.isEmpty || publishableKey.isEmpty) {
-      AppLogger.warning(
-          'Supabase URL or Key is empty. Skipping initialization.');
-      return;
+    final isPlaceholderUrl = url.isEmpty ||
+        url.contains('your-project-ref') ||
+        url.contains('example.com');
+    final isPlaceholderKey = publishableKey.isEmpty ||
+        publishableKey.contains('your_public_anon_key') ||
+        publishableKey.contains('placeholder');
+
+    if (isPlaceholderUrl || isPlaceholderKey) {
+      final errorMessage =
+          'CRITICAL: Supabase credentials are missing or set to placeholder values.\n'
+          'SUPABASE_URL: "$url"\n'
+          'Please configure valid credentials in .env.development before running Winger.';
+      AppLogger.error(errorMessage);
+      throw StateError(errorMessage);
     }
 
     try {
@@ -44,9 +53,9 @@ class SupabaseService {
       AppLogger.info(
           'Supabase SDK initialized successfully for environment: ${EnvConfig.environment.name}');
     } catch (e, stackTrace) {
-      debugPrint('Supabase initialization note: $e');
       AppLogger.error('Failed to initialize Supabase SDK',
           error: e, stackTrace: stackTrace);
+      throw StateError('Failed to initialize Supabase SDK: $e');
     }
   }
 }
