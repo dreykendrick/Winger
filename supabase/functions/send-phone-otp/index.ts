@@ -28,12 +28,14 @@ serve(async (req: Request) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
 
+    const tokenStr = authHeader.replace(/^Bearer\s+/i, '').trim();
+
     // User context client
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    const { data: { user }, error: userError } = await userClient.auth.getUser(tokenStr);
     if (userError || !user) {
       return buildErrorResponse('Unauthorized session', 'UNAUTHORIZED', 401);
     }
@@ -63,7 +65,7 @@ serve(async (req: Request) => {
     }
 
     // Rate limit check via RPC (max 3 requests per 5 minutes per phone)
-    const { data: isAllowed, error: rateError } = await sysClient.rpc('ops.fn_check_rate_limit', {
+    const { data: isAllowed, error: rateError } = await sysClient.rpc('fn_check_rate_limit', {
       p_identifier_key: `otp_req_${normalizedPhone}`,
       p_max_requests: 3,
       p_window_seconds: 300,

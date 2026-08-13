@@ -29,12 +29,14 @@ serve(async (req: Request) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
 
+    const tokenStr = authHeader.replace(/^Bearer\s+/i, '').trim();
+
     // Authenticate caller session
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    const { data: { user }, error: userError } = await userClient.auth.getUser(tokenStr);
     if (userError || !user) {
       return buildErrorResponse('Unauthorized session', 'UNAUTHORIZED', 401);
     }
