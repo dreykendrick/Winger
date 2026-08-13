@@ -199,10 +199,12 @@ class AuthRepositoryImpl implements AuthRepository {
         },
       );
 
-      if (response.user == null) {
+      if (response.user == null ||
+          (response.user!.identities != null &&
+              response.user!.identities!.isEmpty)) {
         _isRegistering = false;
-        const failure =
-            AuthError('Registration failed. No user object returned.');
+        const failure = AuthError(
+            'An account with this email already exists. Please sign in instead.');
         _authStateController.add(const AuthenticationFailure(failure));
         return const Error(failure);
       }
