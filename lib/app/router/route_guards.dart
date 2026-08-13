@@ -4,9 +4,11 @@ class RouteGuards {
   RouteGuards._();
 
   static const List<String> publicRoutes = [
+    RouteNames.roleSelection,
     RouteNames.login,
-    '/register',
-    '/forgot-password',
+    RouteNames.register,
+    RouteNames.infoCollection,
+    RouteNames.forgotPassword,
     '/verify-phone',
     '/reset-password',
     '/splash',
@@ -43,14 +45,15 @@ class RouteGuards {
 
     if (!isAuthenticated) {
       if (!isPublic) {
-        return RouteNames.login;
+        return RouteNames.roleSelection;
       }
       return null;
     }
 
     if (isAuthenticated &&
         (currentLocation == RouteNames.login ||
-            currentLocation == '/register')) {
+            currentLocation == RouteNames.register ||
+            currentLocation == RouteNames.roleSelection)) {
       return RouteNames.home;
     }
 

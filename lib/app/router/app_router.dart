@@ -34,6 +34,9 @@ import 'route_guards.dart';
 import 'route_names.dart';
 import 'route_parameters.dart';
 
+import '../../features/auth/presentation/screens/info_collection_screen.dart';
+import '../../features/auth/presentation/screens/role_selection_screen.dart';
+
 final routerProvider = Provider<GoRouter>((ref) {
   final authObserver = ref.watch(authObserverProvider);
 
@@ -53,7 +56,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // During cold start on splash, stay on splash while authenticating
       if (currentLocation == '/splash') {
         if (isAuthenticating) return null;
-        return isAuthenticated ? RouteNames.home : RouteNames.login;
+        return isAuthenticated ? RouteNames.home : RouteNames.roleSelection;
       }
 
       final hasVendorCapabilities =
@@ -77,6 +80,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SplashScreen(),
       ),
       GoRoute(
+        path: RouteNames.roleSelection,
+        name: 'role-selection',
+        builder: (context, state) => const RoleSelectionScreen(),
+      ),
+      GoRoute(
         path: RouteNames.login,
         name: RouteNames.login,
         builder: (context, state) => const LoginScreen(),
@@ -85,6 +93,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/register',
         name: 'register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: RouteNames.infoCollection,
+        name: 'info-collection',
+        builder: (context, state) {
+          final roleStr = state.uri.queryParameters['role'] ?? 'vendor';
+          final accountType = roleStr == 'affiliate'
+              ? AccountType.affiliate
+              : AccountType.vendor;
+          return InfoCollectionScreen(accountType: accountType);
+        },
       ),
       GoRoute(
         path: '/forgot-password',

@@ -29,6 +29,6 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    expect(find.text('Log In'), findsWidgets);
+    expect(find.text('Welcome to Winger'), findsWidgets);
   });
 }

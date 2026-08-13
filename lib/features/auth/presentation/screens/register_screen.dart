@@ -41,6 +41,28 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _canResend = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        final roleParam = GoRouterState.of(context).uri.queryParameters['role'];
+        if (roleParam != null) {
+          if (roleParam == 'affiliate') {
+            setState(() => _selectedAccountType = AccountType.affiliate);
+          } else if (roleParam == 'customer') {
+            setState(() => _selectedAccountType = AccountType.customer);
+          } else {
+            setState(() => _selectedAccountType = AccountType.vendor);
+          }
+        }
+      } catch (_) {
+        // GoRouterState not available when rendered directly in widget unit tests
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _pageController.dispose();
     _nameController.dispose();
@@ -117,13 +139,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   void _onSkipPhoneOtp() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Registration complete! Please log in.'),
-        backgroundColor: WingerTokens.primaryEmerald,
-      ),
-    );
-    context.go('/login');
+    context.go('/info-collection?role=${_selectedAccountType.name}');
   }
 
   @override
@@ -140,11 +156,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       } else if (next is PhoneVerified) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Phone number verified! Account is now active.'),
+            content: Text('Phone number verified! Proceeding to setup...'),
             backgroundColor: WingerTokens.primaryEmerald,
           ),
         );
-        context.go('/login');
+        context.go('/info-collection?role=${_selectedAccountType.name}');
       } else if (next is AuthenticationFailure) {
         setState(() {
           _errorMessage = next.failure.message;

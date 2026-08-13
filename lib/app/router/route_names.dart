@@ -1,9 +1,11 @@
 /// Centralized Route Names & Path Definitions for GoRouter.
 abstract class RouteNames {
   static const root = '/';
+  static const roleSelection = '/role-selection';
   static const auth = '/auth';
   static const login = '/login';
   static const register = '/register';
+  static const infoCollection = '/info-collection';
   static const forgotPassword = '/forgot-password';
   static const resetPassword = '/reset-password';
   static const verifyEmail = '/verify-email';

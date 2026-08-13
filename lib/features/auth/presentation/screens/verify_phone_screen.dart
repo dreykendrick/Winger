@@ -101,11 +101,11 @@ class _VerifyPhoneScreenState extends ConsumerState<VerifyPhoneScreen> {
       } else if (next is PhoneVerified || next is Authenticated) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Phone number verified! Account is now active.'),
+            content: Text('Phone number verified! Proceeding to setup...'),
             backgroundColor: WingerTokens.primaryEmerald,
           ),
         );
-        context.go(RouteNames.home);
+        context.go('/info-collection');
       } else if (next is AuthenticationFailure) {
         setState(() {
           _errorMessage = next.failure.message;
