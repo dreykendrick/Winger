@@ -33,21 +33,19 @@ serve(async (req: Request) => {
 
     const rawPhone = body.phone_number || body.phone;
     if (!rawPhone) {
-      return buildSuccessResponse(
-        { sent: false },
+      return buildErrorResponse(
         'phone_number or phone field is required',
         'VALIDATION_ERROR',
-        200
+        400
       );
     }
 
     const normalizedPhone = normalizeTanzanianPhone(rawPhone);
     if (!normalizedPhone) {
-      return buildSuccessResponse(
-        { sent: false },
-        'Invalid Tanzanian phone number format. Please enter a valid number e.g. 0759340243.',
+      return buildErrorResponse(
+        'Invalid Tanzanian phone number format. Please enter a valid 10-digit number e.g. 0759340243.',
         'INVALID_PHONE_FORMAT',
-        200
+        400
       );
     }
 
@@ -96,7 +94,7 @@ serve(async (req: Request) => {
     }
 
     if (!profileId) {
-      console.warn(`[Send OTP] No profile found for ${normalizedPhone}. Resolving fallback profile.`);
+      return buildErrorResponse('User profile not found', 'PROFILE_NOT_FOUND', 404);
     }
 
     const { data: isAllowed, error: rateError } = await sysClient.rpc('fn_check_rate_limit', {
@@ -106,39 +104,31 @@ serve(async (req: Request) => {
     });
 
     if (rateError || isAllowed === false) {
-      return buildSuccessResponse(
-        { sent: false },
+      return buildErrorResponse(
         'Too many verification requests. Please wait before retrying.',
         'RATE_LIMITED',
-        200
+        429
       );
     }
 
     const briqRes = await briqRequestOtp(normalizedPhone);
-
-    if (profileId) {
-      await sysClient
-        .from('phone_verification_challenges')
-        .insert({
-          profile_id: profileId,
-          phone_number: normalizedPhone,
-          status: 'PENDING',
-        });
-    }
 
     if (!briqRes.success) {
       const isConfigError = briqRes.error?.includes('BRIQ_NOT_CONFIGURED');
       const errCode = isConfigError ? 'BRIQ_NOT_CONFIGURED' : (briqRes.error ?? 'SMS_DELIVERY_FAILED');
       const errMsg = isConfigError
         ? 'Briq SMS Gateway is not configured. Missing BRIQ_API_KEY secret.'
-        : `Briq SMS dispatch note: ${briqRes.error}`;
-      return buildSuccessResponse(
-        { sent: true, expires_in: 600, bypass_code: '123456' },
-        errMsg,
-        errCode,
-        200
-      );
+        : `Briq SMS dispatch error: ${briqRes.error}`;
+      return buildErrorResponse(errMsg, errCode, 502);
     }
+
+    await sysClient
+      .from('phone_verification_challenges')
+      .insert({
+        profile_id: profileId,
+        phone_number: normalizedPhone,
+        status: 'PENDING',
+      });
 
     return buildSuccessResponse(
       { sent: true, expires_in: 600, bypass_code: '123456' },
@@ -149,11 +139,6 @@ serve(async (req: Request) => {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown exception';
     console.error(`[Send OTP Exception]:`, errorMsg);
-    return buildSuccessResponse(
-      { sent: true, expires_in: 600, bypass_code: '123456' },
-      `OTP Request processed: ${errorMsg}`,
-      'OTP_SENT',
-      200
-    );
+    return buildErrorResponse(`OTP Request failed: ${errorMsg}`, 'EXCEPTION_ERROR', 500);
   }
 });

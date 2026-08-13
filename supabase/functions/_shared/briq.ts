@@ -22,46 +22,50 @@ export function normalizeTanzanianPhone(raw: string): string | null {
   return null;
 }
 
-export async function briqRequestOtp(phoneNumber: string): Promise<{ success: boolean; error?: string; generatedCode?: string }> {
+export async function briqRequestOtp(phoneNumber: string): Promise<{ success: boolean; error?: string }> {
   try {
     const senderId = Deno.env.get('BRIQ_SENDER_ID')?.trim();
+    
+    // Build primary payload (without custom sender_id unless valid)
     const payload: Record<string, unknown> = {
       phone_number: phoneNumber,
       delivery_method: 'sms',
       otp_length: 6,
       minutes_to_expire: 10,
     };
-    if (senderId && senderId.length > 0) {
+
+    if (senderId && senderId.length > 0 && senderId !== 'BRIQ' && senderId !== 'Afrilink') {
       payload.sender_id = senderId;
     }
 
-    console.log(`[Briq OTP] Requesting OTP for ${phoneNumber} via ${BRIQ_BASE_URL}/v1/otp/request...`);
+    console.log(`[Briq OTP] Requesting OTP for ${phoneNumber}...`);
     console.log(`[Briq OTP] Payload:`, JSON.stringify(payload));
 
-    const res = await fetch(`${BRIQ_BASE_URL}/v1/otp/request`, {
+    let res = await fetch(`${BRIQ_BASE_URL}/v1/otp/request`, {
       method: 'POST',
       headers: briqHeaders(),
       body: JSON.stringify(payload),
     });
 
-    const resText = await res.text();
-    console.log(`[Briq OTP] Response Status: ${res.status}, Body: ${resText}`);
+    let resText = await res.text();
+    console.log(`[Briq OTP] Attempt 1 Status: ${res.status}, Body: ${resText}`);
 
-    if (res.ok) {
-      return { success: true };
+    // If failed due to sender_id restrictions, retry cleanly WITHOUT sender_id
+    if (!res.ok && payload.sender_id) {
+      console.log(`[Briq OTP] Retrying without sender_id...`);
+      delete payload.sender_id;
+      res = await fetch(`${BRIQ_BASE_URL}/v1/otp/request`, {
+        method: 'POST',
+        headers: briqHeaders(),
+        body: JSON.stringify(payload),
+      });
+      resText = await res.text();
+      console.log(`[Briq OTP] Attempt 2 Status: ${res.status}, Body: ${resText}`);
     }
 
-    // Primary /v1/otp/request returned non-200. Attempt Instant SMS Fallback via /v1/message/send-instant
-    console.log(`[Briq OTP] Primary OTP request failed (Status ${res.status}). Attempting instant SMS fallback...`);
-    const fallbackCode = '123456'; // Developer test code fallback
-    const instantRes = await briqSendSms(
-      phoneNumber,
-      `Your Winger verification code is: ${fallbackCode}. Valid for 10 minutes.`
-    );
-
-    if (instantRes.success) {
-      console.log(`[Briq OTP] Instant SMS fallback delivered successfully!`);
-      return { success: true, generatedCode: fallbackCode };
+    if (res.ok) {
+      console.log(`[Briq OTP] OTP sent successfully via Briq API!`);
+      return { success: true };
     }
 
     return { success: false, error: `Briq API Error (${res.status}): ${resText}` };
@@ -110,24 +114,38 @@ export async function briqVerifyOtp(phoneNumber: string, code: string): Promise<
 export async function briqSendSms(phoneNumber: string, message: string): Promise<{ success: boolean; error?: string }> {
   try {
     const digits = phoneNumber.replace(/\D/g, '');
-    const senderId = Deno.env.get('BRIQ_SENDER_ID')?.trim() || 'Afrilink';
-    const payload = {
+    const senderId = Deno.env.get('BRIQ_SENDER_ID')?.trim();
+    
+    const payload: Record<string, unknown> = {
       content: message,
       recipients: [digits],
-      sender_id: senderId,
     };
+    if (senderId && senderId.length > 0 && senderId !== 'BRIQ' && senderId !== 'Afrilink') {
+      payload.sender_id = senderId;
+    }
 
-    console.log(`[Briq Instant SMS] Sending SMS to ${digits} via ${BRIQ_BASE_URL}/v1/message/send-instant...`);
+    console.log(`[Briq Instant SMS] Sending SMS to ${digits}...`);
     console.log(`[Briq Instant SMS] Payload:`, JSON.stringify(payload));
 
-    const res = await fetch(`${BRIQ_BASE_URL}/v1/message/send-instant`, {
+    let res = await fetch(`${BRIQ_BASE_URL}/v1/message/send-instant`, {
       method: 'POST',
       headers: briqHeaders(),
       body: JSON.stringify(payload),
     });
 
-    const resText = await res.text();
-    console.log(`[Briq Instant SMS] Response Status: ${res.status}, Body: ${resText}`);
+    let resText = await res.text();
+    console.log(`[Briq Instant SMS] Attempt 1 Status: ${res.status}, Body: ${resText}`);
+
+    if (!res.ok && payload.sender_id) {
+      delete payload.sender_id;
+      res = await fetch(`${BRIQ_BASE_URL}/v1/message/send-instant`, {
+        method: 'POST',
+        headers: briqHeaders(),
+        body: JSON.stringify(payload),
+      });
+      resText = await res.text();
+      console.log(`[Briq Instant SMS] Attempt 2 Status: ${res.status}, Body: ${resText}`);
+    }
 
     if (!res.ok) {
       return { success: false, error: `HTTP ${res.status}: ${resText}` };

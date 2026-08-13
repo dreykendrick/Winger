@@ -243,9 +243,14 @@ class AuthRepositoryImpl implements AuthRepository {
         body: {'phone_number': phone},
       );
 
-      if (res.status != 200) {
-        final errorMsg =
-            res.data?['message'] as String? ?? 'Failed to send OTP code.';
+      final responseData = res.data as Map<String, dynamic>?;
+      final isSuccess = responseData?['success'] as bool? ?? (res.status == 200);
+      final isSent = responseData?['data']?['sent'] as bool? ?? isSuccess;
+
+      if (res.status != 200 || !isSuccess || !isSent) {
+        final errorMsg = responseData?['message'] as String? ??
+            responseData?['error']?['details'] as String? ??
+            'Failed to send OTP code via Briq.';
         AppLogger.warning('send-phone-otp error response: $errorMsg');
         final failure = AuthError(errorMsg);
         _authStateController.add(AuthenticationFailure(failure));
