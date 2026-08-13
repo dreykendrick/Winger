@@ -3,35 +3,52 @@
 -- Description: Extends checkout schema with checkout.sessions, session_items, pricing_snapshots, shipping_snapshots, inventory_reservations, payment_intents, payment_logs, timeline, state transition RPCs, and inventory sweeper procedures.
 
 -- 1. Domain Enums
-CREATE TYPE checkout.enum_checkout_state AS ENUM (
-    'DRAFT',
-    'VALIDATING',
-    'READY_FOR_PAYMENT',
-    'PAYMENT_PENDING',
-    'PAYMENT_PROCESSING',
-    'PAYMENT_SUCCESSFUL',
-    'PAYMENT_FAILED',
-    'CANCELLED',
-    'EXPIRED',
-    'COMPLETED'
-);
+DO $$ BEGIN
+    CREATE TYPE checkout.enum_checkout_state AS ENUM (
+        'DRAFT',
+        'VALIDATING',
+        'READY_FOR_PAYMENT',
+        'PAYMENT_PENDING',
+        'PAYMENT_PROCESSING',
+        'PAYMENT_SUCCESSFUL',
+        'PAYMENT_FAILED',
+        'CANCELLED',
+        'EXPIRED',
+        'COMPLETED'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE checkout.enum_payment_intent_status AS ENUM (
-    'PENDING',
-    'PROCESSING',
-    'SUCCEEDED',
-    'FAILED',
-    'CANCELLED',
-    'EXPIRED'
-);
+DO $$ BEGIN
+    CREATE TYPE checkout.enum_payment_intent_status AS ENUM (
+        'PENDING',
+        'PROCESSING',
+        'SUCCEEDED',
+        'FAILED',
+        'CANCELLED',
+        'EXPIRED'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE checkout.enum_gateway_provider AS ENUM (
-    'SELCOM',
-    'MEETPAY',
-    'STRIPE'
-);
+DO $$ BEGIN
+    CREATE TYPE checkout.enum_gateway_provider AS ENUM (
+        'SELCOM',
+        'MEETPAY',
+        'STRIPE'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 2. Checkout Sessions Root Aggregate (`checkout.sessions`)
+DROP TABLE IF EXISTS checkout.timeline CASCADE;
+DROP TABLE IF EXISTS checkout.payment_intents CASCADE;
+DROP TABLE IF EXISTS checkout.inventory_reservations CASCADE;
+DROP TABLE IF EXISTS checkout.shipping_snapshots CASCADE;
+DROP TABLE IF EXISTS checkout.pricing_snapshots CASCADE;
+DROP TABLE IF EXISTS checkout.session_items CASCADE;
+DROP TABLE IF EXISTS checkout.sessions CASCADE;
+
 CREATE TABLE checkout.sessions (
     id UUID PRIMARY KEY DEFAULT public.gen_random_uuid_v7(),
     workspace_id UUID NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,

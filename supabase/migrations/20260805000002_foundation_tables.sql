@@ -1,9 +1,42 @@
--- Winger Backend V2 - Sprint 1: Foundation
--- Migration: 20260805000002_foundation_tables.sql
--- Description: Creates global foundational tables (profiles, roles, permissions, settings, feature_flags, audit_logs).
+-- 0. Ensure pgcrypto & update gen_random_uuid_v7
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE OR REPLACE FUNCTION public.gen_random_uuid_v7()
+RETURNS UUID AS $$
+DECLARE
+    v_time DOUBLE PRECISION;
+    v_epoch_ms BIGINT;
+    v_bytes BYTEA;
+BEGIN
+    v_time := extract(epoch FROM clock_timestamp());
+    v_epoch_ms := floor(v_time * 1000)::BIGINT;
+    
+    BEGIN
+        v_bytes := gen_random_bytes(16);
+    EXCEPTION WHEN undefined_function THEN
+        v_bytes := extensions.gen_random_bytes(16);
+    END;
+    
+    -- Timestamp 48 bits (6 bytes)
+    v_bytes := set_byte(v_bytes, 0, ((v_epoch_ms >> 40) & 255)::int);
+    v_bytes := set_byte(v_bytes, 1, ((v_epoch_ms >> 32) & 255)::int);
+    v_bytes := set_byte(v_bytes, 2, ((v_epoch_ms >> 24) & 255)::int);
+    v_bytes := set_byte(v_bytes, 3, ((v_epoch_ms >> 16) & 255)::int);
+    v_bytes := set_byte(v_bytes, 4, ((v_epoch_ms >> 8) & 255)::int);
+    v_bytes := set_byte(v_bytes, 5, (v_epoch_ms & 255)::int);
+    
+    -- Version 7 (0111 in top 4 bits of byte 6)
+    v_bytes := set_byte(v_bytes, 6, ((get_byte(v_bytes, 6) & 15) | 112)::int);
+    
+    -- Variant 10xx in top 2 bits of byte 8 (RFC 4122 / 9562)
+    v_bytes := set_byte(v_bytes, 8, ((get_byte(v_bytes, 8) & 63) | 128)::int);
+    
+    RETURN encode(v_bytes, 'hex')::UUID;
+END;
+$$ LANGUAGE plpgsql VOLATILE SET search_path = public, extensions;
 
 -- 1. User Profiles Table (`public.profiles`)
-CREATE TABLE public.profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY DEFAULT public.gen_random_uuid_v7(),
     auth_user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,

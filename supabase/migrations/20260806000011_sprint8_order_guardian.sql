@@ -3,34 +3,50 @@
 -- Description: Extends order_guardian schema with protection_cases, delivery_verifications, dispute_cases, evidence_files, trust_timelines, sla_trackers, risk_signals, fn_evaluate_escrow_release, and fn_expire_protection_windows.
 
 -- 1. Domain Enums
-CREATE TYPE order_guardian.enum_protection_status AS ENUM (
-    'ACTIVE',
-    'DELIVERY_PENDING',
-    'DELIVERY_VERIFIED',
-    'RELEASE_REQUESTED',
-    'DISPUTED',
-    'COMPLETED',
-    'CLOSED'
-);
+DO $$ BEGIN
+    CREATE TYPE order_guardian.enum_protection_status AS ENUM (
+        'ACTIVE',
+        'DELIVERY_PENDING',
+        'DELIVERY_VERIFIED',
+        'RELEASE_REQUESTED',
+        'DISPUTED',
+        'COMPLETED',
+        'CLOSED'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE order_guardian.enum_verification_method AS ENUM (
-    'CUSTOMER_CONFIRMATION',
-    'VENDOR_CONFIRMATION',
-    'OTP',
-    'QR_CODE',
-    'PHOTO_EVIDENCE',
-    'AUTO_TIMEOUT'
-);
+DO $$ BEGIN
+    CREATE TYPE order_guardian.enum_verification_method AS ENUM (
+        'CUSTOMER_CONFIRMATION',
+        'VENDOR_CONFIRMATION',
+        'OTP',
+        'QR_CODE',
+        'PHOTO_EVIDENCE',
+        'AUTO_TIMEOUT'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE order_guardian.enum_dispute_type AS ENUM (
-    'DELIVERY_NOT_RECEIVED',
-    'WRONG_ITEM',
-    'DAMAGED_ITEM',
-    'MISSING_ITEMS',
-    'SUSPECTED_FRAUD'
-);
+DO $$ BEGIN
+    CREATE TYPE order_guardian.enum_dispute_type AS ENUM (
+        'DELIVERY_NOT_RECEIVED',
+        'WRONG_ITEM',
+        'DAMAGED_ITEM',
+        'MISSING_ITEMS',
+        'SUSPECTED_FRAUD'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 2. Root Protection Cases Table (`order_guardian.protection_cases`)
+DROP TABLE IF EXISTS order_guardian.sla_trackers CASCADE;
+DROP TABLE IF EXISTS order_guardian.trust_timelines CASCADE;
+DROP TABLE IF EXISTS order_guardian.evidence_files CASCADE;
+DROP TABLE IF EXISTS order_guardian.dispute_cases CASCADE;
+DROP TABLE IF EXISTS order_guardian.delivery_verifications CASCADE;
+DROP TABLE IF EXISTS order_guardian.protection_cases CASCADE;
+
 CREATE TABLE order_guardian.protection_cases (
     id UUID PRIMARY KEY DEFAULT public.gen_random_uuid_v7(),
     order_reference TEXT UNIQUE NOT NULL,

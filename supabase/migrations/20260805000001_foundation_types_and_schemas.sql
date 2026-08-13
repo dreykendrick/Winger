@@ -2,7 +2,9 @@
 -- Migration: 20260805000001_foundation_types_and_schemas.sql
 -- Description: Creates isolated schemas, UUIDv7 generator, and global domain enums.
 
--- 1. Create Isolated System Schemas
+-- 1. Create Isolated System Schemas & Extensions
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 CREATE SCHEMA IF NOT EXISTS order_guardian;
 CREATE SCHEMA IF NOT EXISTS wallet_ledger;
 CREATE SCHEMA IF NOT EXISTS audit_system;
@@ -14,33 +16,40 @@ GRANT USAGE ON SCHEMA wallet_ledger TO service_role;
 GRANT USAGE ON SCHEMA audit_system TO service_role;
 
 -- 2. PostgreSQL UUIDv7 Generator Function
--- Generates time-ordered 128-bit UUIDv7 for index locality and B-tree optimization.
+-- Generates time-ordered 128-bit UUIDv7 (RFC 9562) for index locality and B-tree optimization.
 CREATE OR REPLACE FUNCTION public.gen_random_uuid_v7()
 RETURNS UUID AS $$
 DECLARE
     v_time DOUBLE PRECISION;
     v_epoch_ms BIGINT;
-    v_time_hex TEXT;
     v_bytes BYTEA;
-    v_guid TEXT;
 BEGIN
     v_time := extract(epoch FROM clock_timestamp());
     v_epoch_ms := floor(v_time * 1000)::BIGINT;
-    v_time_hex := lpad(to_hex(v_epoch_ms), 12, '0');
-    v_bytes := gen_random_bytes(10);
     
-    -- Construct UUIDv7 hex string
-    v_guid := substr(v_time_hex, 1, 8) || '-' ||
-              substr(v_time_hex, 9, 4) || '-' ||
-              '7' || substr(to_hex((get_byte(v_bytes, 0) & 15) | 0), 1, 1) || substr(to_hex(get_byte(v_bytes, 1)), 1, 2) || '-' ||
-              to_hex((get_byte(v_bytes, 2) & 63) | 128) || to_hex(get_byte(v_bytes, 3)) || '-' ||
-              to_hex(get_byte(v_bytes, 4)) || to_hex(get_byte(v_bytes, 5)) ||
-              to_hex(get_byte(v_bytes, 6)) || to_hex(get_byte(v_bytes, 7)) ||
-              to_hex(get_byte(v_bytes, 8)) || to_hex(get_byte(v_bytes, 9));
-              
-    RETURN v_guid::UUID;
+    BEGIN
+        v_bytes := gen_random_bytes(16);
+    EXCEPTION WHEN undefined_function THEN
+        v_bytes := extensions.gen_random_bytes(16);
+    END;
+    
+    -- Timestamp 48 bits (6 bytes)
+    v_bytes := set_byte(v_bytes, 0, ((v_epoch_ms >> 40) & 255)::int);
+    v_bytes := set_byte(v_bytes, 1, ((v_epoch_ms >> 32) & 255)::int);
+    v_bytes := set_byte(v_bytes, 2, ((v_epoch_ms >> 24) & 255)::int);
+    v_bytes := set_byte(v_bytes, 3, ((v_epoch_ms >> 16) & 255)::int);
+    v_bytes := set_byte(v_bytes, 4, ((v_epoch_ms >> 8) & 255)::int);
+    v_bytes := set_byte(v_bytes, 5, (v_epoch_ms & 255)::int);
+    
+    -- Version 7 (0111 in top 4 bits of byte 6)
+    v_bytes := set_byte(v_bytes, 6, ((get_byte(v_bytes, 6) & 15) | 112)::int);
+    
+    -- Variant 10xx in top 2 bits of byte 8 (RFC 4122 / 9562)
+    v_bytes := set_byte(v_bytes, 8, ((get_byte(v_bytes, 8) & 63) | 128)::int);
+    
+    RETURN encode(v_bytes, 'hex')::UUID;
 END;
-$$ LANGUAGE plpgsql VOLATILE;
+$$ LANGUAGE plpgsql VOLATILE SET search_path = public, extensions;
 
 COMMENT ON FUNCTION public.gen_random_uuid_v7() IS 'Generates time-sortable UUIDv7 primary keys to prevent B-tree index fragmentation.';
 
