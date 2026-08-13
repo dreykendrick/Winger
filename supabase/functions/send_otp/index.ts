@@ -1,0 +1,132 @@
+// Winger Backend V2 - Send OTP Edge Function Alias (send_otp)
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import { corsHeaders } from '../_shared/cors.ts';
+import { buildSuccessResponse, buildErrorResponse } from '../_shared/response.ts';
+import { briqRequestOtp, normalizeTanzanianPhone } from '../_shared/briq.ts';
+
+interface SendOtpPayload {
+  phone_number?: string;
+  phone?: string;
+}
+
+serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  if (req.method !== 'POST') {
+    return buildErrorResponse('Method Not Allowed', 'METHOD_NOT_ALLOWED', 405);
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+
+    const body: SendOtpPayload = await req.json();
+    const rawPhone = body.phone_number || body.phone;
+    if (!rawPhone) {
+      return buildErrorResponse('phone_number or phone is required', 'VALIDATION_ERROR', 400);
+    }
+
+    const normalizedPhone = normalizeTanzanianPhone(rawPhone);
+    if (!normalizedPhone) {
+      return buildErrorResponse('Invalid Tanzanian phone number format', 'INVALID_PHONE_FORMAT', 400);
+    }
+
+    const sysClient = createClient(supabaseUrl, serviceRoleKey);
+
+    let profileId: string | null = null;
+    const authHeader = req.headers.get('Authorization');
+
+    if (authHeader) {
+      const tokenStr = authHeader.replace(/^Bearer\s+/i, '').trim();
+      if (tokenStr && tokenStr !== anonKey) {
+        try {
+          const userClient = createClient(supabaseUrl, anonKey, {
+            global: { headers: { Authorization: authHeader } },
+          });
+          const { data: { user } } = await userClient.auth.getUser(tokenStr);
+          if (user) {
+            const { data: p } = await sysClient
+              .from('profiles')
+              .select('id')
+              .eq('auth_user_id', user.id)
+              .maybeSingle();
+            if (p) profileId = p.id;
+          }
+        } catch (_) {
+          // Token fallback
+        }
+      }
+    }
+
+    if (!profileId) {
+      const { data: p } = await sysClient
+        .from('profiles')
+        .select('id')
+        .or(`phone_number.eq.${normalizedPhone},phone.eq.${normalizedPhone}`)
+        .maybeSingle();
+      if (p) {
+        profileId = p.id;
+      } else {
+        const { data: latestP } = await sysClient
+          .from('profiles')
+          .select('id')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (latestP) profileId = latestP.id;
+      }
+    }
+
+    if (!profileId) {
+      return buildErrorResponse('User profile not found', 'PROFILE_NOT_FOUND', 404);
+    }
+
+    const { data: isAllowed, error: rateError } = await sysClient.rpc('fn_check_rate_limit', {
+      p_identifier_key: `otp_req_${normalizedPhone}`,
+      p_max_requests: 3,
+      p_window_seconds: 300,
+    });
+
+    if (rateError || !isAllowed) {
+      return buildErrorResponse('Too many verification requests. Please wait before retrying.', 'RATE_LIMITED', 429);
+    }
+
+    const briqRes = await briqRequestOtp(normalizedPhone);
+    if (!briqRes.success) {
+      const isConfigError = briqRes.error?.includes('BRIQ_NOT_CONFIGURED');
+      const errCode = isConfigError ? 'BRIQ_NOT_CONFIGURED' : (briqRes.error ?? 'SMS_DELIVERY_FAILED');
+      const errMsg = isConfigError
+        ? 'Briq SMS Gateway is not configured. Missing BRIQ_API_KEY secret in Supabase Edge Functions.'
+        : `Failed to send verification SMS: ${briqRes.error}`;
+      return buildErrorResponse(errMsg, errCode, 500);
+    }
+
+    const { error: dbError } = await sysClient
+      .from('phone_verification_challenges')
+      .insert({
+        profile_id: profileId,
+        phone_number: normalizedPhone,
+        status: 'PENDING',
+      });
+
+    if (dbError) {
+      return buildErrorResponse(`Failed to store challenge state: ${dbError.message}`, 'DB_ERROR', 500);
+    }
+
+    return buildSuccessResponse({ expires_in: 600 }, 'Verification code sent successfully', 'OTP_SENT', 200);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Unknown exception';
+    if (errorMsg.includes('BRIQ_NOT_CONFIGURED')) {
+      return buildErrorResponse(
+        'Briq SMS Gateway is not configured. Missing BRIQ_API_KEY secret in Supabase Edge Functions.',
+        'BRIQ_NOT_CONFIGURED',
+        500
+      );
+    }
+    return buildErrorResponse(errorMsg, 'EXCEPTION_ERROR', 500);
+  }
+});
