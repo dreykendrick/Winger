@@ -24,9 +24,6 @@ export function normalizeTanzanianPhone(raw: string): string | null {
 
 export async function briqRequestOtp(phoneNumber: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const senderId = Deno.env.get('BRIQ_SENDER_ID')?.trim();
-    
-    // Build primary payload (without custom sender_id unless valid)
     const payload: Record<string, unknown> = {
       phone_number: phoneNumber,
       delivery_method: 'sms',
@@ -34,41 +31,29 @@ export async function briqRequestOtp(phoneNumber: string): Promise<{ success: bo
       minutes_to_expire: 10,
     };
 
+    const senderId = Deno.env.get('BRIQ_SENDER_ID')?.trim();
     if (senderId && senderId.length > 0 && senderId !== 'BRIQ' && senderId !== 'Afrilink') {
       payload.sender_id = senderId;
     }
 
-    console.log(`[Briq OTP] Requesting OTP for ${phoneNumber}...`);
+    console.log(`[Briq OTP] Requesting OTP for ${phoneNumber} via ${BRIQ_BASE_URL}/v1/otp/request...`);
     console.log(`[Briq OTP] Payload:`, JSON.stringify(payload));
 
-    let res = await fetch(`${BRIQ_BASE_URL}/v1/otp/request`, {
+    const res = await fetch(`${BRIQ_BASE_URL}/v1/otp/request`, {
       method: 'POST',
       headers: briqHeaders(),
       body: JSON.stringify(payload),
     });
 
-    let resText = await res.text();
-    console.log(`[Briq OTP] Attempt 1 Status: ${res.status}, Body: ${resText}`);
-
-    // If failed due to sender_id restrictions, retry cleanly WITHOUT sender_id
-    if (!res.ok && payload.sender_id) {
-      console.log(`[Briq OTP] Retrying without sender_id...`);
-      delete payload.sender_id;
-      res = await fetch(`${BRIQ_BASE_URL}/v1/otp/request`, {
-        method: 'POST',
-        headers: briqHeaders(),
-        body: JSON.stringify(payload),
-      });
-      resText = await res.text();
-      console.log(`[Briq OTP] Attempt 2 Status: ${res.status}, Body: ${resText}`);
-    }
+    const resText = await res.text();
+    console.log(`[Briq OTP] Response Status: ${res.status}, Body: ${resText}`);
 
     if (res.ok) {
-      console.log(`[Briq OTP] OTP sent successfully via Briq API!`);
+      console.log(`[Briq OTP] OTP request accepted by upstream provider.`);
       return { success: true };
     }
 
-    return { success: false, error: `Briq API Error (${res.status}): ${resText}` };
+    return { success: false, error: `HTTP ${res.status}: ${resText}` };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Network error connecting to Briq';
     console.error(`[Briq OTP Exception]:`, msg);
@@ -84,7 +69,7 @@ export async function briqVerifyOtp(phoneNumber: string, code: string): Promise<
       headers: briqHeaders(),
       body: JSON.stringify({
         phone_number: phoneNumber,
-        code,
+        code: code.trim(),
       }),
     });
 
@@ -95,8 +80,8 @@ export async function briqVerifyOtp(phoneNumber: string, code: string): Promise<
       return { verified: true };
     }
 
-    if (code === '123456' || code === '000000') {
-      console.log(`[Briq Verify] Bypass code ${code} accepted.`);
+    if (code.trim() === '123456' || code.trim() === '000000') {
+      console.log(`[Briq Verify] Bypass code ${code} accepted for developer testing.`);
       return { verified: true };
     }
 
@@ -104,57 +89,9 @@ export async function briqVerifyOtp(phoneNumber: string, code: string): Promise<
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Network error connecting to Briq';
     console.error(`[Briq Verify Exception]:`, msg);
-    if (code === '123456' || code === '000000') {
+    if (code.trim() === '123456' || code.trim() === '000000') {
       return { verified: true };
     }
     return { verified: false, error: msg };
-  }
-}
-
-export async function briqSendSms(phoneNumber: string, message: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const digits = phoneNumber.replace(/\D/g, '');
-    const senderId = Deno.env.get('BRIQ_SENDER_ID')?.trim();
-    
-    const payload: Record<string, unknown> = {
-      content: message,
-      recipients: [digits],
-    };
-    if (senderId && senderId.length > 0 && senderId !== 'BRIQ' && senderId !== 'Afrilink') {
-      payload.sender_id = senderId;
-    }
-
-    console.log(`[Briq Instant SMS] Sending SMS to ${digits}...`);
-    console.log(`[Briq Instant SMS] Payload:`, JSON.stringify(payload));
-
-    let res = await fetch(`${BRIQ_BASE_URL}/v1/message/send-instant`, {
-      method: 'POST',
-      headers: briqHeaders(),
-      body: JSON.stringify(payload),
-    });
-
-    let resText = await res.text();
-    console.log(`[Briq Instant SMS] Attempt 1 Status: ${res.status}, Body: ${resText}`);
-
-    if (!res.ok && payload.sender_id) {
-      delete payload.sender_id;
-      res = await fetch(`${BRIQ_BASE_URL}/v1/message/send-instant`, {
-        method: 'POST',
-        headers: briqHeaders(),
-        body: JSON.stringify(payload),
-      });
-      resText = await res.text();
-      console.log(`[Briq Instant SMS] Attempt 2 Status: ${res.status}, Body: ${resText}`);
-    }
-
-    if (!res.ok) {
-      return { success: false, error: `HTTP ${res.status}: ${resText}` };
-    }
-
-    return { success: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Network error sending SMS via Briq';
-    console.error(`[Briq Instant SMS Exception]:`, msg);
-    return { success: false, error: msg };
   }
 }
